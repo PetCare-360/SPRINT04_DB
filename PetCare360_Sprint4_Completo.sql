@@ -1,8 +1,5 @@
 -- PetCare360 - Sprint 4 - script Oracle unificado
--- Executar como script (F5 no SQL Developer) no schema de entrega.
--- Este script remove e recria tabelas e dados de demonstracao.
--- Para gerar o JSON na mesma pasta, inicie a ferramenta SQL nessa pasta.
--- Ordem: estrutura e carga -> package e trigger -> testes -> exportacao.
+
 
 WHENEVER SQLERROR EXIT SQL.SQLCODE ROLLBACK
 SET SERVEROUTPUT ON;

@@ -22,17 +22,25 @@ try {
 if (!dataset || !Array.isArray(dataset.pets) || dataset.pets.length === 0) {
   throw new Error("Dataset invalido: o array pets deve possuir ao menos um documento.");
 }
+if (dataset.schemaVersion !== "2.0" || dataset.pets.some((pet) =>
+  !Array.isArray(pet.veterinarians) || !Array.isArray(pet.messages) ||
+  !Array.isArray(pet.appointments) || !Array.isArray(pet.recommendations) ||
+  !Array.isArray(pet.alerts) || pet.alerts.some((alert) => !Array.isArray(alert.history)))) {
+  throw new Error("Dataset incompatível: gere novamente o JSON da versao 2.0 no Oracle.");
+}
 
 const validator = {
   $jsonSchema: {
     bsonType: "object",
-    required: ["petId", "name", "age", "weight", "breed", "owner", "device", "sensorReadings", "alerts"],
+    required: ["petId", "name", "age", "weight", "breed", "species", "active", "owner", "device", "sensorReadings", "veterinarians", "messages", "appointments", "recommendations", "alerts"],
     properties: {
       petId: { bsonType: ["int", "long", "double", "decimal"], minimum: 1 },
       name: { bsonType: "string", minLength: 1 },
       age: { bsonType: ["int", "long", "double", "decimal"], minimum: 0 },
       weight: { bsonType: ["int", "long", "double", "decimal"], minimum: 0, exclusiveMinimum: true },
       breed: { bsonType: "string", minLength: 1 },
+      species: { enum: ["DOG", "CAT", "OTHER"] },
+      active: { bsonType: ["int", "long", "double", "decimal"], enum: [0, 1] },
       createdAt: { bsonType: "date" },
       owner: {
         bsonType: "object",
@@ -45,9 +53,10 @@ const validator = {
       },
       device: {
         bsonType: "object",
-        required: ["deviceId", "status", "battery", "lastSeen"],
+        required: ["deviceId", "deviceCode", "status", "battery", "lastSeen"],
         properties: {
           deviceId: { bsonType: ["int", "long", "double", "decimal"] },
+          deviceCode: { bsonType: "string", minLength: 1 },
           status: { enum: ["A", "I", "M"] },
           battery: { bsonType: ["int", "long", "double", "decimal"], minimum: 0, maximum: 100 },
           lastSeen: { bsonType: "date" }
@@ -79,15 +88,79 @@ const validator = {
           }
         }
       },
+      veterinarians: {
+        bsonType: "array",
+        items: {
+          bsonType: "object",
+          required: ["userId", "name", "assignedAt", "active"],
+          properties: {
+            userId: { bsonType: ["int", "long", "double", "decimal"] },
+            name: { bsonType: "string" },
+            assignedAt: { bsonType: "date" },
+            active: { enum: [0, 1] }
+          }
+        }
+      },
+      messages: {
+        bsonType: "array",
+        items: {
+          bsonType: "object",
+          required: ["messageId", "senderId", "receiverId", "subject", "message", "status", "createdAt"],
+          properties: {
+            status: { enum: ["SENT", "READ", "ANSWERED"] },
+            createdAt: { bsonType: "date" },
+            readAt: { bsonType: ["date", "null"] }
+          }
+        }
+      },
+      appointments: {
+        bsonType: "array",
+        items: {
+          bsonType: "object",
+          required: ["appointmentId", "tutorId", "veterinarianId", "scheduledAt", "reason", "status", "createdAt"],
+          properties: {
+            scheduledAt: { bsonType: "date" },
+            status: { enum: ["REQUESTED", "CONFIRMED", "CANCELED", "DONE"] },
+            createdAt: { bsonType: "date" }
+          }
+        }
+      },
+      recommendations: {
+        bsonType: "array",
+        items: {
+          bsonType: "object",
+          required: ["recommendationId", "tutorId", "veterinarianId", "title", "instructions", "priority", "status", "createdAt"],
+          properties: {
+            priority: { enum: ["LOW", "NORMAL", "HIGH"] },
+            status: { enum: ["ACTIVE", "COMPLETED", "CANCELED"] },
+            createdAt: { bsonType: "date" },
+            completedAt: { bsonType: ["date", "null"] }
+          }
+        }
+      },
       alerts: {
         bsonType: "array",
         items: {
           bsonType: "object",
-          required: ["alertId", "type", "message", "level", "createdAt"],
+          required: ["alertId", "type", "message", "level", "status", "createdAt", "history"],
           properties: {
-            type: { enum: ["ACTIVITY", "TEMPERATURE"] },
+            type: { enum: ["ACTIVITY", "TEMPERATURE", "HEART_RATE", "BATTERY"] },
             level: { enum: ["CRITICAL", "INFO", "WARNING"] },
-            createdAt: { bsonType: "date" }
+            status: { enum: ["OPEN", "IN_PROGRESS", "RESOLVED"] },
+            createdAt: { bsonType: "date" },
+            resolvedAt: { bsonType: ["date", "null"] },
+            history: {
+              bsonType: "array",
+              items: {
+                bsonType: "object",
+                required: ["historyId", "userId", "newStatus", "createdAt"],
+                properties: {
+                  previousStatus: { enum: [null, "OPEN", "IN_PROGRESS", "RESOLVED"] },
+                  newStatus: { enum: ["OPEN", "IN_PROGRESS", "RESOLVED"] },
+                  createdAt: { bsonType: "date" }
+                }
+              }
+            }
           }
         }
       },
@@ -133,9 +206,33 @@ const operations = dataset.pets.map((pet) => ({
         ...reading,
         timestamp: toDate(reading.timestamp, `sensor ${reading.sensorId}.timestamp`)
       })),
+      veterinarians: pet.veterinarians.map((vet) => ({
+        ...vet,
+        assignedAt: toDate(vet.assignedAt, `veterinario ${vet.userId}.assignedAt`)
+      })),
+      messages: pet.messages.map((message) => ({
+        ...message,
+        createdAt: toDate(message.createdAt, `mensagem ${message.messageId}.createdAt`),
+        readAt: message.readAt ? toDate(message.readAt, `mensagem ${message.messageId}.readAt`) : null
+      })),
+      appointments: pet.appointments.map((appointment) => ({
+        ...appointment,
+        scheduledAt: toDate(appointment.scheduledAt, `consulta ${appointment.appointmentId}.scheduledAt`),
+        createdAt: toDate(appointment.createdAt, `consulta ${appointment.appointmentId}.createdAt`)
+      })),
+      recommendations: pet.recommendations.map((recommendation) => ({
+        ...recommendation,
+        createdAt: toDate(recommendation.createdAt, `recomendacao ${recommendation.recommendationId}.createdAt`),
+        completedAt: recommendation.completedAt ? toDate(recommendation.completedAt, `recomendacao ${recommendation.recommendationId}.completedAt`) : null
+      })),
       alerts: pet.alerts.map((alert) => ({
         ...alert,
-        createdAt: toDate(alert.createdAt, `alert ${alert.alertId}.createdAt`)
+        createdAt: toDate(alert.createdAt, `alert ${alert.alertId}.createdAt`),
+        resolvedAt: alert.resolvedAt ? toDate(alert.resolvedAt, `alert ${alert.alertId}.resolvedAt`) : null,
+        history: alert.history.map((item) => ({
+          ...item,
+          createdAt: toDate(item.createdAt, `historico ${item.historyId}.createdAt`)
+        }))
       })),
       source: {
         system: "Oracle",
@@ -156,6 +253,8 @@ targetDb.pets.createIndex({ "owner.userId": 1 }, { name: "idx_pets_owner" });
 targetDb.pets.createIndex({ "device.deviceId": 1 }, { unique: true, name: "uk_pets_device" });
 targetDb.pets.createIndex({ "sensorReadings.location": "2dsphere" }, { name: "idx_sensor_location" });
 targetDb.pets.createIndex({ "alerts.level": 1 }, { name: "idx_alert_level" });
+targetDb.pets.createIndex({ "veterinarians.userId": 1 }, { name: "idx_pets_veterinario" });
+targetDb.pets.createIndex({ "appointments.scheduledAt": 1 }, { name: "idx_consultas_data" });
 
 printjson({
   database: databaseName,
@@ -168,5 +267,6 @@ printjson({
 
 printjson(targetDb.pets.findOne(
   { petId: 1 },
-  { _id: 0, petId: 1, name: 1, owner: 1, device: 1, sensorReadings: { $slice: 1 }, alerts: 1 }
+  { _id: 0, petId: 1, name: 1, owner: 1, device: 1, veterinarians: 1,
+    appointments: 1, sensorReadings: { $slice: 1 }, alerts: 1 }
 ));

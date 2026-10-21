@@ -68,4 +68,4 @@ No VS Code, a extensão **MongoDB for VS Code** também permite abrir `petcare36
 | Rafael de Freitas Moraes | 563210 |
 | Rafael Pascotte Mercadante | 564928 |
 
-**Licença:** não definida para esta entrega acadêmica.
+

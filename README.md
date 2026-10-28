@@ -19,45 +19,99 @@ Base Oracle do PetCare360 para tutores, pets, dispositivos, sensores, alertas e 
 
 O modelo logico e o fisico estao nos PDFs desta pasta. A estrutura usa apenas tabelas com prefixo `TB_`. A aplicacao Java correspondente usa este schema Oracle `TB_*`; configure-a para apontar para a mesma conta Oracle.
 
-## Como executar
+## Executar o Oracle
 
 1. Use um **schema Oracle de teste** com permissao para criar tabelas, indices, sequences, packages e trigger.
-2. Instale o Oracle SQL Developer para Windows, conecte-se ao schema de teste, abra `PetCare360_Sprint4_Completo.sql` e execute o arquivo inteiro como **script** (`F5`). Ele apaga e recria seus objetos `TB_*`, carrega exemplos, compila as rotinas, roda os testes e exporta o JSON. **Nao execute em uma base com dados que queira preservar.**
+2. No Oracle SQL Developer, conecte-se ao schema de teste, abra `PetCare360_Sprint4_Completo.sql` e execute o arquivo inteiro como **script** (`F5`). Ele apaga e recria os objetos `TB_*`, carrega exemplos, compila as rotinas, roda os testes e exporta o JSON. **Nao execute em uma base com dados que queira preservar.**
 3. Confira no log `Funcoes clinicas: OK`, `Procedures clinicas: OK`, `Excecao e log clinico: OK` e nenhuma linha de objeto invalido.
-4. Coloque o JSON gerado pelo `SPOOL` com o nome `03_dataset_petcare360_exportado.json` nesta pasta. A localizacao do `SPOOL` depende do diretorio de trabalho do cliente SQL. O JSON versionado na pasta e uma **amostra alinhada com a carga inicial**; para entrega final, regenere-o no Oracle.
-5. No Windows, instale o MongoDB Community Server 8.0 pelo instalador MSI e o MongoDB Shell (`mongosh`) pelo instalador MSI. Durante a instalacao do servidor, mantenha a opcao de instalar como servico. O servico normalmente inicia ao final da instalacao; se precisar inicia-lo manualmente, abra o PowerShell como administrador e rode:
+4. Coloque o JSON gerado pelo `SPOOL` nesta pasta com o nome `03_dataset_petcare360_exportado.json`. A localizacao depende do diretorio de trabalho do cliente SQL. O JSON versionado e uma **amostra alinhada com a carga inicial**; para a entrega final, gere-o novamente no Oracle.
+
+## MongoDB no Windows pelo VS Code
+
+Este passo a passo usa o projeto PetCare360. O MongoDB Server fica instalado e rodando no Windows; o VS Code se conecta a ele pela extensão oficial. O arquivo JSON é importado para o banco pelo script `04_mongodb_import.js`.
+
+### 1. Instale o MongoDB
+
+Se ainda não estiver instalado, baixe o **MongoDB Community Server** para Windows e, durante a instalação, mantenha a opção de instalá-lo como serviço. O serviço normalmente inicia ao terminar a instalação.
+
+Instale também o **MongoDB Shell (mongosh)**: ele é separado do servidor. Se o Windows não reconhecer `mongosh` depois da instalação, feche e reabra o VS Code para atualizar o terminal. [Instalação do MongoDB no Windows](https://www.mongodb.com/docs/v8.0/tutorial/install-mongodb-on-windows/) · [Instalação do mongosh](https://www.mongodb.com/docs/mongodb-shell/install/)
+
+### 2. Abra o projeto no VS Code
+
+No VS Code, use **File → Open Folder** e selecione a pasta do projeto. Depois, abra **Terminal → New Terminal** e confira se estão nela os arquivos:
+
+- `04_mongodb_import.js`
+- `03_dataset_petcare360_exportado.json`
+
+No terminal integrado, verifique se o serviço está rodando:
+
+```powershell
+Get-Service MongoDB
+```
+
+Se o estado não for `Running`, abra o PowerShell como administrador e inicie o serviço:
 
 ```powershell
 Start-Service MongoDB
 ```
 
-6. Abra o PowerShell na pasta do projeto e importe o dataset:
+### 3. Importe o JSON
+
+No terminal do VS Code, entre na pasta que contém os arquivos. Troque o caminho de exemplo pelo caminho real:
 
 ```powershell
-cd "C:\caminho\para\Sprint04_Database"
+cd "C:\Users\SEU_USUARIO\Downloads\SPRINT04_DB-main"
+```
+
+Execute o script:
+
+```powershell
 mongosh "mongodb://localhost:27017" .\04_mongodb_import.js
 ```
 
-Para confirmar que as ferramentas estao instaladas, use `mongod --version` e `mongosh --version`. Se o comando `mongosh` nao for reconhecido, feche e abra o PowerShell novamente ou adicione a pasta do `mongosh.exe` ao `PATH` do Windows.
+A importação concluída deve mostrar `totalDocuments: 5`. Na primeira execução, podem aparecer cinco documentos em `upserted`; ao repetir, o script atualiza os documentos existentes.
 
-A importacao deve mostrar `totalDocuments: 5`. Reexecutar atualiza os cinco documentos. As senhas e os tokens de autenticacao nao sao enviados ao MongoDB.
+### Se `mongosh` não for reconhecido
 
-## Usar o MongoDB pelo VS Code
+No bate-papo, o Shell foi encontrado neste caminho. Você pode chamá-lo diretamente:
 
-1. Abra esta pasta no VS Code.
-2. Na extensao **MongoDB for VS Code**, procure e instale a extensao oficial da MongoDB. Se ainda nao tiver instalado, abra a aba de extensoes com `Ctrl+Shift+X` e pesquise por `MongoDB for VS Code`.
-3. Na barra lateral, abra **MongoDB** e escolha **Add Connection** ou **Connect with Connection String**.
-4. Informe a conexao local `mongodb://localhost:27017` e conecte. O servico MongoDB do Windows precisa estar iniciado.
-5. Na lista de conexoes, expanda `petcare360` e depois `pets` para navegar pelos documentos importados.
+```powershell
+& "$env:LOCALAPPDATA\Programs\mongosh\mongosh.exe" "mongodb://localhost:27017" .\04_mongodb_import.js
+```
 
-Para testar uma consulta, crie um **MongoDB Playground** pela paleta de comandos (`Ctrl+Shift+P`) e execute:
+### 4. Conecte o VS Code ao MongoDB
+
+1. Pressione **Ctrl + Shift + X** e instale a extensão oficial **MongoDB for VS Code**, publicada pela MongoDB. [Guia de instalação da extensão](https://www.mongodb.com/docs/mongodb-vscode/install/)
+2. Abra a seção **MongoDB** na barra lateral e escolha **Add Connection**.
+3. Informe a conexão local:
+
+   ```text
+   mongodb://localhost:27017
+   ```
+
+4. Expanda a conexão, o banco `petcare360` e a coleção `pets`.
+
+### 5. Consulte os documentos
+
+Pressione **Ctrl + Shift + P**, procure **MongoDB: Create MongoDB Playground** e execute:
 
 ```javascript
 use('petcare360');
-db.pets.find({}, { _id: 0, petId: 1, name: 1, owner: 1 }).limit(5);
+
+db.pets.find(
+  {},
+  { _id: 0, petId: 1, name: 1, owner: 1 }
+).limit(5);
 ```
 
-Consulte o guia oficial da [extensao MongoDB para VS Code](https://www.mongodb.com/docs/mongodb-vscode/) para instalar a extensao, conectar e explorar databases e collections.
+O Playground mostra os resultados dentro do VS Code. [Guia de Playgrounds](https://www.mongodb.com/docs/mongodb-vscode/playgrounds/)
+
+### Se algo der errado
+
+- **Conexão recusada:** confira se `Get-Service MongoDB` mostra `Running`.
+- **`mongosh` não reconhecido:** tente o caminho completo acima ou reabra o VS Code.
+- **Arquivo não encontrado:** confira a pasta atual com `Get-Location` e liste os arquivos com `dir`.
+- **Nenhum documento na consulta:** confira se a importação terminou e se está consultando `petcare360.pets`.
 
 ## Consulta rapida
 
